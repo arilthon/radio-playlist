@@ -88,7 +88,8 @@ def processar(client, playlist, title, dry_run=False, history=None):
     if client is not None and isinstance(client, TidalClient):
         import fcntl
         from hashlib import sha256
-        path = ROOT / ('.playlist-' + sha256((client.provider+':'+playlist).encode()).hexdigest()[:24] + '.lock')
+        from app_config import storage_root
+        path = storage_root(ROOT) / ('.playlist-' + sha256((client.provider+':'+playlist).encode()).hexdigest()[:24] + '.lock')
         with open(path, 'a') as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             return _processar(client, playlist, title, dry_run, history)

@@ -1,10 +1,12 @@
 """Seleção do serviço musical por rádio."""
 import re
+from app_config import storage_root
 from tidal_client import TidalClient
 from spotify_client import SpotifyClient, spotify_id
 
 
 def client_from_values(root, provider, values):
+    root = storage_root(root)
     country = (values.get('SPOTIFY_COUNTRY_CODE' if provider=='spotify' else 'TIDAL_COUNTRY_CODE') or 'BR').strip().upper()
     if not re.fullmatch('[A-Z]{2}',country):
         raise ValueError('O país do catálogo deve ter duas letras, por exemplo BR.')

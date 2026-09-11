@@ -4,6 +4,7 @@ from pathlib import Path
 
 import requests
 from dotenv import dotenv_values
+from app_config import environment_config
 
 from radio import obter_metadados_icecast, playlist_id
 from tidal_client import TidalClient
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def diagnose(profile_id='default'):
-    values = dotenv_values(ROOT / '.env')
+    values = environment_config(dotenv_values(ROOT / '.env'))
     provider = 'tidal'
     if profile_id != 'default':
         from radio_profiles import get_profile

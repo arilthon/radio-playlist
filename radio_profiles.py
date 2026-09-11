@@ -7,9 +7,11 @@ from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from dotenv import dotenv_values
+from app_config import storage_root, environment_config
 
 
 def data_dir(root, profile_id='default'):
+    root = storage_root(root)
     if profile_id == 'default':
         return Path(root)
     if not re.fullmatch(r'[a-f0-9]{12}', profile_id):
@@ -21,10 +23,10 @@ def data_dir(root, profile_id='default'):
 
 def profiles(root):
     root = Path(root)
-    values = dotenv_values(root / '.env')
+    values = environment_config(dotenv_values(root / '.env'))
     original = {'id': 'default', 'provider': 'tidal', 'name': 'Rádio principal',
                 'url': values.get('RADIO_STREAM_URL') or '', 'playlist': values.get('PLAYLIST_ID') or ''}
-    path = root / 'radios.json'
+    path = storage_root(root) / 'radios.json'
     return [original] + [{'provider':'tidal', **item} for item in (json.loads(path.read_text()) if path.exists() else [])]
 
 
@@ -53,7 +55,7 @@ def add_profile(root, name, url, playlist, provider='tidal'):
         raise ValueError('Já existe uma rádio com esse nome.')
     profile = dict(id=uuid4().hex[:12], name=name, url=url, playlist=playlist, provider=provider)
     entries.append(profile)
-    path = Path(root) / 'radios.json'
+    path = storage_root(root) / 'radios.json'
     temporary = path.with_suffix('.tmp')
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as file:
@@ -73,7 +75,7 @@ def set_archived(root, profile_id, archived):
         for entry in entries:
             if entry['id'] == profile_id:
                 entry['archived'] = bool(archived)
-        path = Path(root) / 'radios.json'
+        path = storage_root(root) / 'radios.json'
         temporary = path.with_suffix('.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w') as file:

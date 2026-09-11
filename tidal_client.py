@@ -95,7 +95,7 @@ class TidalClient:
                 self.wfile.write(body)
 
         try:
-            server = HTTPServer(('127.0.0.1', parsed.port or 80), CallbackHandler)
+            server = HTTPServer((os.environ.get('OAUTH_BIND_HOST','127.0.0.1'), parsed.port or 80), CallbackHandler)
         except OSError:
             raise ValueError('Nao foi possivel abrir a porta do callback. Feche outra instancia do programa ou configure outra porta no .env e no painel do serviço.') from None
         with server:

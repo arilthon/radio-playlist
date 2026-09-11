@@ -169,3 +169,11 @@ Selecione uma rádio adicionada e clique em **Arquivar rádio**. O painel encerr
 Marque **Mostrar rádios arquivadas**, selecione a emissora e clique em **Restaurar rádio** para voltar à lista principal. A restauração não inicia a captura: escolha o modo e inicie quando desejar. Rádios arquivadas não podem ser iniciadas pelo painel nem pelo comando `radio.py --profile`.
 
 Se a rádio foi iniciada em outro terminal, pare-a nesse terminal antes de arquivar. A **Rádio principal**, configurada pelo `.env`, não pode ser arquivada nesta versão. O arquivamento é reversível e não exige confirmação adicional.
+
+## Imagem Docker
+
+```bash
+docker compose up -d --build
+```
+
+Acesse http://127.0.0.1:8090 . Consulte [DOCKER.md](DOCKER.md) para login, persistência, migração dos dados locais e configuração do Docker Desktop/WSL. O `.env` é fornecido em tempo de execução e não entra na imagem.

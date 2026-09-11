@@ -1,0 +1,22 @@
+services:
+  radio:
+    image: ${RADIO_IMAGE:-radio-playlist:local}
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RADIO_DATA_DIR: /data
+      DASHBOARD_BIND_HOST: 0.0.0.0
+      OAUTH_BIND_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - radio-data:/data
+    stop_grace_period: 30s
+
+volumes:
+  radio-data:

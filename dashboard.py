@@ -1,5 +1,6 @@
 """Painel local: python dashboard.py e abra http://127.0.0.1:8090."""
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import secrets
@@ -10,6 +11,7 @@ import threading
 import time
 
 from history import History
+from app_config import environment_config
 from radio_status import summarize
 from instance_lock import running
 from radio_profiles import data_dir, profiles, get_profile, add_profile, set_archived
@@ -44,7 +46,7 @@ class Controller:
                 from dotenv import dotenv_values
                 from music_service import client_from_values
                 provider = get_profile(ROOT,self.profile_id).get('provider','tidal')
-                client = client_from_values(ROOT,provider,dotenv_values(ROOT / '.env'))
+                client = client_from_values(ROOT,provider,environment_config(dotenv_values(ROOT / '.env')))
                 if not client.token.get('refresh_token') and not (
                     client.token.get('access_token') and client.token.get('expires_at',0)>time.time()+60
                 ):
@@ -192,7 +194,7 @@ def serve(port=8090):
             self.wfile.write(data)
 
         def do_GET(self):
-            if self.headers.get('Host') != host:
+            if self.headers.get('Host') not in (host, f'localhost:{port}'):
                 return self.respond(403, {'error': 'Host inválido'})
             if self.path == '/':
                 return self.respond(200, (ROOT / 'dashboard.html').read_text().replace('__CSRF__', csrf), 'text/html')
@@ -220,7 +222,7 @@ def serve(port=8090):
             self.respond(404, {})
 
         def do_POST(self):
-            if self.headers.get('Host') != host or self.headers.get('X-CSRF-Token') != csrf:
+            if self.headers.get('Host') not in (host, f'localhost:{port}') or self.headers.get('X-CSRF-Token') != csrf:
                 return self.respond(403, {'error': 'Recarregue o painel.'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
@@ -251,7 +253,10 @@ def serve(port=8090):
                 self.respond(200, {'ok': True})
             except ValueError as exc:
                 self.respond(400, {'error': str(exc)})
-    server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    server = ThreadingHTTPServer((os.environ.get('DASHBOARD_BIND_HOST','127.0.0.1'), port), Handler)
+    def terminate(signum, frame):
+        raise KeyboardInterrupt
+    previous_term = signal.signal(signal.SIGTERM, terminate)
     print(f'Painel: http://{host}', flush=True)
     try:
         server.serve_forever()
@@ -261,6 +266,7 @@ def serve(port=8090):
         for controller in controllers.values():
             controller.stop()
         server.server_close()
+        signal.signal(signal.SIGTERM, previous_term)
 
 
 if __name__ == '__main__':

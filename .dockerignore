@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!requirements.txt
+!*.py
+!dashboard.html
+test_*.py
