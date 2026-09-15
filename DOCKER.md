@@ -61,7 +61,7 @@ docker compose stop
 docker compose down
 ```
 
-`down` preserva o volume. Não use `down -v` se deseja conservar os dados. Ao encerrar o contêiner, o painel para seus monitores. Ao reiniciar, cadastros e filas continuam disponíveis, mas você inicia as rádios novamente pelo painel. O healthcheck confirma apenas que o painel responde, não que as rádios ou serviços musicais estão conectados.
+`down` preserva o volume. Não use `down -v` se deseja conservar os dados. Ao encerrar o contêiner, o painel para seus monitores. Ao reiniciar, as rádios iniciadas pelo painel nesta versão retomam automaticamente no último modo. O botão Parar e o arquivamento desabilitam a retomada da rádio. Monitores iniciados diretamente no terminal não são cadastrados para retomada. Se faltar autorização, a retomada mostra o motivo no diagnóstico e requer corrigir o login e iniciar a rádio. O healthcheck confirma apenas que o painel responde, não que as rádios ou serviços musicais estão conectados.
 
 Para aplicar mudanças no `.env`:
 
@@ -106,3 +106,12 @@ A imagem só estará disponível depois que o workflow terminar com sucesso. O G
 Para atualizar, troque `RADIO_IMAGE` pela nova versão e repita os comandos. Para voltar, escolha uma versão anterior. Faça backup dos dados antes de atualizar; mudanças de estrutura no banco podem exigir restauração do backup. O volume existente é preservado ao recriar o serviço. A publicação no GitHub não atualiza automaticamente o aplicativo no seu computador.
 
 Referência: https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
+
+
+## Continuidade da captura e recuperação da fila
+
+Falhas de autorização ou acesso à playlist pausam as inclusões, mantendo a captura ativa e a fila persistente. O acesso é verificado novamente a cada 60 segundos; respostas 429 respeitam a espera do serviço e a coordenação compartilhada entre rádios.
+
+Falhas individuais temporárias recebem até cinco tentativas, com esperas de 60, 120, 240 e 480 segundos. Durante a espera, outras músicas podem ser processadas. Faixas inválidas e tentativas esgotadas aparecem na revisão manual; corrigir e reprocessar reinicia as tentativas. Erros de playlist ou de renovação do token não consomem tentativas individuais. As músicas já tocadas enquanto o aplicativo estava completamente desligado não podem ser recuperadas pelo stream ICY.
+
+Na primeira atualização para esta versão, inicie as rádios pelo painel para registrar a preferência de retomada. Faça backup do volume antes de atualizar: o banco recebe automaticamente colunas para controlar as tentativas.

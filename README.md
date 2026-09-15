@@ -177,3 +177,10 @@ docker compose up -d --build
 ```
 
 Acesse http://127.0.0.1:8090 . Consulte [DOCKER.md](DOCKER.md) para login, persistência, migração dos dados locais e configuração do Docker Desktop/WSL. O `.env` é fornecido em tempo de execução e não entra na imagem.
+
+
+### Editar uma rádio
+
+Selecione a rádio e clique em **Editar rádio**. Pare o monitor e aguarde qualquer diagnóstico antes de salvar. Nome e URL podem ser alterados sem apagar histórico, fila ou escolhas. Serviço e playlist só podem ser trocados enquanto a rádio não tem dados; para mudar o destino de uma rádio já utilizada, cadastre outra.
+
+A rádio principal também pode ser editada: suas configurações salvas no painel passam a prevalecer sobre nome, URL, playlist e serviço originais. As credenciais continuam no `.env`. No Docker, as edições ficam no volume persistente. Salvar não inicia o monitor.

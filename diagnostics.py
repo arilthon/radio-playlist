@@ -4,7 +4,7 @@ from pathlib import Path
 
 import requests
 from dotenv import dotenv_values
-from app_config import environment_config
+from app_config import environment_config, storage_root
 
 from radio import obter_metadados_icecast, playlist_id
 from tidal_client import TidalClient
@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parent
 def diagnose(profile_id='default'):
     values = environment_config(dotenv_values(ROOT / '.env'))
     provider = 'tidal'
-    if profile_id != 'default':
+    config_path = storage_root(ROOT) / 'radios.json'
+    has_override = config_path.exists() and any(p['id'] == 'default' for p in json.loads(config_path.read_text()))
+    if profile_id != 'default' or has_override:
         from radio_profiles import get_profile
         profile = get_profile(ROOT, profile_id)
         provider = profile.get('provider','tidal')

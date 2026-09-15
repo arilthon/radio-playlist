@@ -39,6 +39,15 @@ class ReviewHTTPTests(unittest.TestCase):
                 payload={'event_id':event_id,'track':'123','mode':'dry','profile':'default'}
                 self.assertEqual(requests.post(base+'/api/approve',json=payload,timeout=2).status_code,403)
                 headers={'X-CSRF-Token':token}
+                radio = {'name':'Edit test','url':'https://radio.test/a','playlist':'a'*22,'provider':'spotify'}
+                created = requests.post(base+'/api/radios',json=radio,headers=headers,timeout=2).json()
+                edit = {**radio,'profile':created['id'],'name':'Edited','url':'https://radio.test/b'}
+                self.assertEqual(requests.post(base+'/api/edit',json=edit,timeout=2).status_code,403)
+                self.assertEqual(requests.post(base+'/api/edit',json=edit,headers=headers,timeout=2).status_code,200)
+                radios = requests.get(base+'/api/radios',timeout=2).json()
+                saved = next(p for p in radios if p['id']==created['id'])
+                self.assertEqual(saved['name'],'Edited')
+                self.assertEqual(saved['url'],'https://radio.test/b')
                 self.assertEqual(requests.post(base+'/api/approve',json=payload,headers=headers,timeout=2).status_code,200)
                 state=requests.get(base+'/api/state',timeout=2).json()
                 self.assertEqual(state['learned'][0]['track_id'],'123')

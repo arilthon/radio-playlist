@@ -2,7 +2,7 @@
 import re
 from urllib.parse import urlparse, parse_qs
 
-from matching import artist_name
+from matching import search_artist
 from tidal_client import TidalClient
 
 
@@ -55,7 +55,7 @@ class SpotifyClient(TidalClient):
 
     def search(self, artist, song):
         result = self.request('GET','/search',params={
-            'q':f'{artist_name(artist)} {song}', 'type':'track', 'limit':10,'market':self.country})
+            'q':f'{search_artist(artist)} {song}', 'type':'track', 'limit':10,'market':self.country})
         return [self.normalize_track(t) for t in result.get('tracks',{}).get('items',[]) if t and t.get('id')]
 
     def playlist_tracks(self, playlist):

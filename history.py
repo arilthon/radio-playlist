@@ -19,6 +19,11 @@ class History:
         self.db.execute('CREATE TABLE IF NOT EXISTS runtime (channel TEXT PRIMARY KEY, payload TEXT, updated REAL)')
         if 'enqueued_at' not in [r[1] for r in self.db.execute('PRAGMA table_info(pending)')]:
             self.db.execute('ALTER TABLE pending ADD COLUMN enqueued_at REAL NOT NULL DEFAULT 0')
+        columns = {r[1] for r in self.db.execute('PRAGMA table_info(pending)')}
+        for name, declaration in [('attempts', 'INTEGER NOT NULL DEFAULT 0'),
+                                  ('next_attempt', 'REAL NOT NULL DEFAULT 0')]:
+            if name not in columns:
+                self.db.execute(f'ALTER TABLE pending ADD COLUMN {name} {declaration}')
         self.db.commit()
 
     def contains(self, playlist, track_id):
@@ -39,8 +44,8 @@ class History:
                             (playlist, title, int(dry_run),time.time()))
 
     def next_pending(self, playlist, dry_run=False):
-        return self.db.execute('SELECT id,title,revision FROM pending WHERE playlist=? AND dry_run=? ORDER BY id LIMIT 1',
-                               (playlist, int(dry_run))).fetchone()
+        return self.db.execute('SELECT id,title,revision FROM pending WHERE playlist=? AND dry_run=? AND next_attempt<=? ORDER BY id LIMIT 1',
+                               (playlist, int(dry_run), time.time())).fetchone()
 
     def finish(self, job_id, revision=None):
         with self.db:
@@ -48,6 +53,23 @@ class History:
                 self.db.execute('DELETE FROM pending WHERE id=?', (job_id,))
             else:
                 self.db.execute('DELETE FROM pending WHERE id=? AND revision=?', (job_id,revision))
+
+    def defer(self, job_id, revision, permanent=False):
+        """Atualiza somente a revisão processada; uma escolha nova tem prioridade."""
+        with self.db:
+            row = self.db.execute('SELECT playlist,title,attempts FROM pending WHERE id=? AND revision=?',
+                                  (job_id, revision)).fetchone()
+            if not row:
+                return
+            playlist, title, attempts = row
+            attempts += 1
+            if permanent or attempts >= 5:
+                self.db.execute('DELETE FROM pending WHERE id=? AND revision=?', (job_id, revision))
+                self.db.execute('INSERT INTO events (playlist,title,status) VALUES (?,?,?)',
+                                (playlist, title, 'erro'))
+            else:
+                self.db.execute('UPDATE pending SET attempts=?,next_attempt=? WHERE id=? AND revision=?',
+                                (attempts, time.time() + min(60 * 2 ** (attempts-1), 900), job_id, revision))
 
     @staticmethod
     def title_key(title):
@@ -84,7 +106,7 @@ class History:
             if track_id:
                 self.db.execute('INSERT OR REPLACE INTO choices VALUES (?,?,?,?)',
                                 (self.title_key(title),title,track_id,label[:200]))
-            self.db.execute('INSERT INTO pending (playlist,title,dry_run,enqueued_at) VALUES (?,?,?,?) ON CONFLICT(playlist,title,dry_run) DO UPDATE SET revision=revision+1',
+            self.db.execute('INSERT INTO pending (playlist,title,dry_run,enqueued_at) VALUES (?,?,?,?) ON CONFLICT(playlist,title,dry_run) DO UPDATE SET revision=revision+1, attempts=0, next_attempt=0',
                             (playlist,title,int(dry_run),time.time()))
             self.db.execute('INSERT INTO events (playlist,title,status,track_id) VALUES (?,?,?,?)',
                             (playlist,title,'escolha_salva' if track_id else 'reprocessamento',track_id))

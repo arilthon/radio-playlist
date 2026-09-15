@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import webbrowser
 
 import requests
-from matching import artist_name
+from matching import search_artist
 
 SCOPES = 'playlists.write search.read'
 TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token'
@@ -177,7 +177,7 @@ class TidalClient:
 
     def search(self, artist, song):
         result = self.request('GET', '/searchResults', params={
-            'filter[query]': f'{artist_name(artist)} {song}'[:256], 'countryCode': self.country, 'include': 'tracks',
+            'filter[query]': f'{search_artist(artist)} {song}'[:256], 'countryCode': self.country, 'include': 'tracks',
         })
         resources = result.get('data', [])
         if not resources:

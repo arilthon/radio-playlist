@@ -14,7 +14,7 @@ from history import History
 from app_config import environment_config
 from radio_status import summarize
 from instance_lock import running
-from radio_profiles import data_dir, profiles, get_profile, add_profile, set_archived
+from radio_profiles import data_dir, profiles, get_profile, add_profile, set_archived, edit_profile
 from urllib.parse import urlparse, parse_qs
 
 ROOT = Path(__file__).resolve().parent
@@ -59,9 +59,26 @@ class Controller:
             args += {'real': [], 'dry': ['--dry-run'], 'radio': ['--radio-only']}[mode]
             self.process = subprocess.Popen(args, cwd=ROOT, stdout=self.log, stderr=self.log, stdin=subprocess.DEVNULL)
             self.mode = mode
+            self.save_desired(mode)
 
-    def stop(self):
+    def desired_mode(self):
+        history = History(self.directory / 'history.sqlite3')
+        try:
+            return history.activities().get('desired', {}).get('mode')
+        finally:
+            history.close()
+
+    def save_desired(self, mode):
+        history = History(self.directory / 'history.sqlite3')
+        try:
+            history.activity('desired', 'enabled' if mode else 'disabled', mode=mode)
+        finally:
+            history.close()
+
+    def stop(self, preserve_desired=False):
         with self.lock:
+            if not preserve_desired:
+                self.save_desired(None)
             if self.process and self.process.poll() is None:
                 self.process.send_signal(signal.SIGINT)
                 try:
@@ -81,6 +98,8 @@ class Controller:
             elif running(self.directory / '.monitor.lock'):
                 raise ValueError('Pare a rádio no terminal original antes de arquivar.')
             set_archived(ROOT,self.profile_id,archived)
+            if archived:
+                self.save_desired(None)
 
     def diagnose(self):
         with self.lock:
@@ -169,6 +188,19 @@ class Controller:
                     events=events, archived=get_profile(ROOT,self.profile_id).get('archived',False), provider=get_profile(ROOT,self.profile_id).get('provider','tidal'), mode=self.mode if owned else None, reviews=reviews, learned=learned, checks=self.checks, diagnosing=self.diagnosing, notice=notice)
 
 
+def resume_monitors(root, controller_for):
+    for profile in profiles(root):
+        if profile.get('archived'):
+            continue
+        controller = controller_for(profile['id'])
+        mode = controller.desired_mode()
+        if mode in ('real', 'dry', 'radio'):
+            try:
+                controller.start(mode)
+            except (ValueError, OSError) as exc:
+                controller.checks = [{'name': 'Retomada automática', 'ok': False, 'detail': str(exc)}]
+
+
 def serve(port=8090):
     controllers = {'default': Controller()}
     registry_lock = threading.RLock()
@@ -216,7 +248,7 @@ def serve(port=8090):
                         detail = summarize(active,history.activities(),metrics)
                     finally:
                         history.close()
-                    items.append({'id': profile['id'], 'name': profile['name'], 'running':active, 'archived':profile.get('archived',False), 'provider':profile.get('provider','tidal'),
+                    items.append({'id': profile['id'], 'name': profile['name'], 'running':active, 'archived':profile.get('archived',False), 'provider':profile.get('provider','tidal'), 'url':profile['url'], 'playlist':profile['playlist'],
                                   'detail':detail,'pending':metrics['queue_real']+metrics['queue_dry']})
                 return self.respond(200, items)
             self.respond(404, {})
@@ -236,7 +268,14 @@ def serve(port=8090):
                         created = add_profile(ROOT, body.get('name'), body.get('url'), body.get('playlist'), body.get('provider','tidal'))
                     return self.respond(200, {'ok': True, 'id': created['id']})
                 controller = controller_for(body.get('profile', 'default'))
-                if self.path == '/api/start':
+                if self.path == '/api/edit':
+                    with registry_lock, controller.lock:
+                        if controller.diagnosing or running(controller.directory / '.monitor.lock') or (controller.process and controller.process.poll() is None):
+                            raise ValueError('Pare o monitor e aguarde o diagnóstico antes de editar.')
+                        updated = edit_profile(ROOT, controller.profile_id, body.get('name'), body.get('url'), body.get('playlist'), body.get('provider'))
+                        controller.checks = []
+                    return self.respond(200, {'ok': True, 'id': updated['id']})
+                elif self.path == '/api/start':
                     with registry_lock:
                         controller.start(body.get('mode', 'dry'))
                 elif self.path in ('/api/archive','/api/restore'):
@@ -259,12 +298,13 @@ def serve(port=8090):
     previous_term = signal.signal(signal.SIGTERM, terminate)
     print(f'Painel: http://{host}', flush=True)
     try:
+        resume_monitors(ROOT, controller_for)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         for controller in controllers.values():
-            controller.stop()
+            controller.stop(preserve_desired=True)
         server.server_close()
         signal.signal(signal.SIGTERM, previous_term)
 

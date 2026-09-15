@@ -11,6 +11,18 @@ from rate_limit import retry_delay
 LOG = logging.getLogger('radio')
 
 
+def account_failure(exc):
+    response = exc.response
+    if response is None:
+        return False
+    status = response.status_code
+    from urllib.parse import urlparse
+    path = urlparse(response.url or '').path
+    return status in (401, 403, 429) or (
+        status in (400, 404, 422) and ('/playlists/' in path or path.endswith('/token')))
+
+
+
 def capture(url, playlist, path, dry_run, radio_only, reconnect_delay, stop, ready, stream):
     history = History(path)
     last = None
@@ -52,8 +64,19 @@ def process_next(client, playlist, history, dry_run, processor):
     job_id, title, revision = job
     # Remover somente depois do processamento; falhas ficam para nova tentativa.
     history.activity('worker','processing',title=title,mode='dry' if dry_run else 'real')
-    processor(client, playlist, title, dry_run, history)
-    history.finish(job_id, revision)
+    try:
+        processor(client, playlist, title, dry_run, history)
+    except requests.RequestException as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if account_failure(exc):
+            raise
+        history.defer(job_id, revision, permanent=status in (400, 404, 422))
+        LOG.warning('Falha HTTP %s em uma música; demais itens continuam. Confira a revisão.', status)
+    except ValueError:
+        history.defer(job_id, revision, permanent=True)
+        LOG.warning('Música encaminhada para revisão; demais itens continuam.')
+    else:
+        history.finish(job_id, revision)
     return True
 
 
@@ -83,10 +106,9 @@ def monitor(url, client, playlist, history, path, dry_run, radio_only, interval)
                 delay = retry_delay(headers.get('Retry-After'), failures) if status == 429 else 60
                 history.activity('worker','rate_limited' if status == 429 else 'retrying',http_status=status,retry_at=time.time()+delay)
                 LOG.warning('serviço musical HTTP %s: faixa mantida na fila. Nova tentativa em %ss; captura continua.', status, delay)
-                if status in (400, 401, 403, 404):
-                    history.activity('worker','error',http_status=status,message='Confira o login, as permissões e a faixa/playlist. Reinicie após corrigir.')
-                    LOG.error('Corrija o acesso ao serviço musical e reinicie. A fila está salva.')
-                    return 1
+                if status != 429 and account_failure(exc):
+                    history.activity('worker','retrying',http_status=status,retry_at=time.time()+delay,message='Inclusões pausadas. Confira login e permissões; a captura continua.')
+                    LOG.warning('Inclusões pausadas por falta de acesso; captura continua e o acesso será verificado novamente.')
                 # A thread de captura segue trabalhando durante esta espera.
                 remaining = delay
                 while remaining > 0:
